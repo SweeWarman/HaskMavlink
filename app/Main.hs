@@ -21,8 +21,8 @@ type MavDataDict a = MP.Map String a
 type MavDictEnum = MP.Map String [String]
 type MavDictDesc = MP.Map String [String]
 
-main :: IO ()
-main = do{
+main1 :: IO ()
+main1 = do{
             bindata1 <- BL.readFile "src/test2.txt"
             ;bindata2 <- BL.readFile "src/test3.txt"
             ;let mavpkt = runGet decodeMavlink2Pkt bindata1
@@ -36,8 +36,8 @@ main = do{
             ;print $ gen_crc25 mavpktword8
          }
 
-test2 :: IO ()
-test2 = do
+main :: IO ()
+main = do
     args <- getArgs
     case args of
         [filename] -> process filename
@@ -75,6 +75,9 @@ process filename = do
     -- print $ get_crcextra (head dictofmessages)
     print $ (zip msgNames crcextras)
     print msglen
+    let msgstring = generateMsgDataType (head dictofmessages)
+    print msgstring 
+    writeFile "src/icarous.hs" msgstring
     -- print msgNames 
     -- print $ getData1 (head dictofmessages) ++ getData2 (head dictofmessages)
     -- Process document before handling error, so we get lazy processing.
@@ -114,6 +117,14 @@ typeSizes = MP.fromList [("char",1),("int8_t",1), ("uint8_t",1),
                          ("int32_t",4),("uint32_t",4),
                          ("int64_t",8),("uint64_t",8),
                          ("float",4),("double",8)]
+
+typeConversion::MP.Map String String
+typeConversion = MP.fromList [("char","Char"),("int8_t","Int8"), ("uint8_t","Uint8"),
+                         ("int16_t","Int16"),("uint16_t","Uint16"),
+                         ("int32_t","Int32"),("uint32_t","Uint32"),
+                         ("int64_t","Int64"),("uint64_t","Uint64"),
+                         ("float","Float"),("double","Double")]
+
 
 
 quickSort::[(String,String)] -> [(String,String)]
@@ -161,32 +172,6 @@ extractMsg xml = MP.fromList [("name",name),
                      crcextra = [show $ get_crcextra (head name) sortedFields sortedTypes extensions]
 
 
-getString:: MavDictDesc -> String
-getString xmldata = head $ fromJust (MP.lookup "name" xmldata)
-
-
-{-
-getData1::MavDictDesc -> String
-getData1 xmldata = (getString xmldata) ++ " "
-
-getData2::MavDictDesc -> String
-getData2 xmldata = foldl f [] (zip fields types)
-                   where
-                    fields  = fromJust $ MP.lookup "sortedFields" xmldata 
-                    types   = fromJust $ MP.lookup "sortedTypes" xmldata 
-                    f z x   = z ++ (fieldType ++ " " ++
-                             fieldName ++ " " ++ fieldLength) 
-                             where
-                                 fieldName = fst x
-                                 fieldType = fst (strBreak "[" (snd x))
-                                 lenfield  = snd (strBreak "[" (snd x))
-                                 fieldLength = if length lenfield > 0
-                                                  then (init (tail lenfield))
-                                               else []
-                                 
--}
-
-
 get_crcextra :: String -> [String] -> [String] -> [String] -> Word8
 get_crcextra name sortedFields sortedTypes extensions = ((fromIntegral crc) .&. 0xff) `xor` fromIntegral (crc `shiftR` 8) 
                where
@@ -208,28 +193,25 @@ get_crcextra name sortedFields sortedTypes extensions = ((fromIntegral crc) .&. 
                                                else []
 
 
-
-    {-
-get_crcextra :: MavDictDesc -> Word8
-get_crcextra xmldata = ((fromIntegral crc) .&. 0xff) `xor` fromIntegral (crc `shiftR` 8) 
-               where
-                    crc     = gen_crc25 (data1 ++ data2)
-                    data1   = DB.unpack $ DBC.pack(getString xmldata ++ " ")
-                    fields  = fromJust $ MP.lookup "sortedFields" xmldata 
-                    types   = fromJust $ MP.lookup "sortedTypes" xmldata 
-                    exten   = fromJust $ MP.lookup "extensions" xmldata 
-                    data2   = foldl f [] (zip fields types)
-                    f z x   = z ++ DB.unpack (DBC.pack(fieldType ++ " " ++
-                             fieldName ++ " ")) ++ fieldLength
-                             where
-                                 fieldName = if ((fst x) `elem` exten) then [] else (fst x)
-                                 fieldType = if ((fst x) `elem` exten) then [] else (fieldtname)
-                                 fieldtname = fst (strBreak "[" (snd x))
-                                 lenfield   = snd (strBreak "[" (snd x))
-                                 fieldLength = if (length lenfield) > 0
-                                                  then [read (init (tail lenfield))]
-                                               else []
-                                               -}
-                                 
+typecombinator::(Int,String)->(String,String)->(Int,String)
+typecombinator (n,z) (field,typed) = (n-1,z ++ field ++ "::" ++ typetext ++ comma ++ "\n")
+                               where
+                                   t = strBreak "[" typed
+                                   typeN = fst t
+                                   len = length (snd t) > 0 
+                                   ts = (fromJust (MP.lookup typeN typeConversion))
+                                   typetext = if len then "[" ++ ts ++ "]" else ts
+                                   comma = if n > 1 then "," else ""
 
 
+generateMsgDataType::MavDictDesc -> String
+generateMsgDataType msgdata =  firstLine ++ (snd typesList) ++ "}\n"
+                               where
+                                   firstLine = "data " ++ name ++ "=" ++ name ++ "{\n"
+                                   name' = head $ fromJust (MP.lookup "name" msgdata)
+                                   name = strCapitalize (strToLower name')
+                                   types = fromJust (MP.lookup "sortedTypes" msgdata)
+                                   fields = fromJust (MP.lookup "sortedFields" msgdata)
+                                   typesList = foldl typecombinator (length types,"") (zip fields types)
+
+                                

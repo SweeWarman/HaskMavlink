@@ -117,15 +117,15 @@ globalPositionIntLen = 28
 
 decodeGlobalPositionInt :: Get GlobalPositionInt
 decodeGlobalPositionInt = do {
-                             _timestamp <- fromIntegral <$> getWord32le
-                            ; _lat  <- fromIntegral <$> getInt32le
-                            ; _lon <- fromIntegral <$> getInt32le
-                            ; _alt <- fromIntegral <$> getInt32le
-                            ; _relative_alt <- fromIntegral <$> getInt32le
-                            ; _vx <- fromIntegral <$> getInt16le
-                            ; _vy <- fromIntegral <$> getInt16le
-                            ; _vz <- fromIntegral <$> getInt16le
-                            ; _hdg <- fromIntegral <$> getWord16le
+                             _timestamp <- getWord32le
+                            ; _lat  <- getInt32le
+                            ; _lon <- getInt32le
+                            ; _alt <- getInt32le
+                            ; _relative_alt <- getInt32le
+                            ; _vx <- getInt16le
+                            ; _vy <- getInt16le
+                            ; _vz <-  getInt16le
+                            ; _hdg <- getWord16le
                             ; return $ GlobalPositionInt _timestamp _lat _lon _alt _relative_alt _vx _vy _vz _hdg}
 
 getGlobalPositionInt::Mavlink2Pkt -> GlobalPositionInt

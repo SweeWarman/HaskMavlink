@@ -76,8 +76,11 @@ process filename = do
     print $ (zip msgNames crcextras)
     print msglen
     let msgstring = generateMsgDataType (head dictofmessages)
+    let decstring = generateDecoder (head dictofmessages)
+    let decwrapstring = generateDecoderWrapper (head dictofmessages)
     print msgstring 
-    writeFile "src/icarous.hs" msgstring
+    print decstring
+    writeFile "src/icarous.hs" (msgstring ++ "\n" ++ decstring ++ "\n" ++ decwrapstring)
     -- print msgNames 
     -- print $ getData1 (head dictofmessages) ++ getData2 (head dictofmessages)
     -- Process document before handling error, so we get lazy processing.
@@ -124,6 +127,14 @@ typeConversion = MP.fromList [("char","Char"),("int8_t","Int8"), ("uint8_t","Uin
                          ("int32_t","Int32"),("uint32_t","Uint32"),
                          ("int64_t","Int64"),("uint64_t","Uint64"),
                          ("float","Float"),("double","Double")]
+
+typeGetMonad::MP.Map String String
+typeGetMonad = MP.fromList [("char","getInt8le"),("int8_t","getInt8le"), ("uint8_t","getWord8le"),
+                         ("int16_t","getInt16le"),("uint16_t","getWord16le"),
+                         ("int32_t","getInt32le"),("uint32_t","getWord32le"),
+                         ("int64_t","getInt64le"),("uint64_t","getWord64le"),
+                         ("float","getFloatle"),("double","getDoublele")]
+
 
 
 
@@ -214,4 +225,41 @@ generateMsgDataType msgdata =  firstLine ++ (snd typesList) ++ "}\n"
                                    fields = fromJust (MP.lookup "sortedFields" msgdata)
                                    typesList = foldl typecombinator (length types,"") (zip fields types)
 
-                                
+
+fieldCombinator::(Int,String) -> (String,String) -> (Int,String)
+fieldCombinator (n,z) (field,typed) = (n-1,z ++ "_" ++ field ++ " <- " ++ typemonadS ++ sep ++ "\n") 
+                                    where
+                                        t = strBreak "[" typed
+                                        typeN = fst t
+                                        len = length (snd t) > 0
+                                        numV = (read (init (tail (snd t)))) 
+                                        typeL = if len then numV else 0 
+                                        typemonad = fromJust $ (MP.lookup typeN typeGetMonad)
+                                        typemonadS = if typeL == 0 then typemonad
+                                                     else "mapM (\\x ->" ++ typemonad ++ ") [i| i <- [1.." ++ show(typeL) ++ "]]"
+                                        sep = if n > 1 then ";" else "\n}"
+
+
+generateDecoder::MavDictDesc -> String
+generateDecoder msgdata = firstLine ++ (snd fieldsText) ++ "\n"
+                           where
+                             firstLine = "decode" ++ name ++ "= do {\n"
+                             name' = head $ fromJust (MP.lookup "name" msgdata)
+                             name = strCapitalize (strToLower name')
+                             types = fromJust (MP.lookup "sortedTypes" msgdata)
+                             fields = fromJust (MP.lookup "sortedFields" msgdata)
+                             fieldsText = foldl fieldCombinator (length types,"")  (zip fields types)
+
+generateDecoderWrapper::MavDictDesc -> String
+generateDecoderWrapper msgdata = firstLine ++ restline
+                                where
+                                    firstLine = "get" ++ name ++ " mavpkt = runGet decode" ++ name  ++ " (BS.pack fullPayload)\n"
+                                    name' = head $ fromJust (MP.lookup "name" msgdata)
+                                    name = strCapitalize (strToLower name')
+                                    restline = "where\n" ++ 
+                                               "    truncPayload = payload mavpkt\n" ++
+                                               "    lenPayload = length truncPayload\n" ++ 
+                                               "    fullPayload = if lenPayload < " ++ name ++ "Len then\n" ++ 
+                                               "                      truncPayload ++ [0| i <- [1..(" ++ name ++"Len - lenPayload)]]\n" ++  
+                                               "                   else truncPayload"
+

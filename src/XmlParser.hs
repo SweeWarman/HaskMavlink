@@ -30,6 +30,8 @@ processXmlFile filename = do
     inputText <- BL.readFile filename
     -- Note: Because we're not using the tree, Haskell can't infer the type of
     -- strings we're using so we need to tell it explicitly with a type signature.
+    let moduleName = (strCapitalize (fst (strBreak "." filename))) 
+    let outputFilename = moduleName ++ ".hs"
     let (xml, mErr) = parse defaultParseOptions inputText :: (UNode String, Maybe XMLParseError)
     let allEnums = getAllEnums xml
     let allMessages = getAllMessages xml
@@ -39,12 +41,12 @@ processXmlFile filename = do
     let allMsgString = foldl (++) "" msgString
     let enumString = generateEnums dictofenums
     let outputString = ("\n" ++ allMsgString ++ "\n\n\n-- ENUMS\n\n" ++ enumString)
-    let headerString = "module Icarous where\n\n"
+    let headerString = "module " ++ moduleName ++ " where\n\n"
     let importString = "import Data.Binary.Get\n" ++ 
                        "import Data.Int\n" ++ 
                        "import MavlinkHelper\n" ++ 
                        "import qualified Data.ByteString.Lazy as BS\n\n" 
-    writeFile "src/Icarous.hs" (headerString ++ importString ++ outputString)
+    writeFile ("src/"++outputFilename) (headerString ++ importString ++ outputString)
     case mErr of
         Nothing -> return ()
         Just err -> do
@@ -67,7 +69,12 @@ getAllEnums xml = onlyElems $ eChildren $ head $ findChildren "enums" xml
 
 getAllEntries::UNode String -> [String]
 getAllEntries xml = foldl f [] (onlyElems $ eChildren xml)
-                 where f z x = z ++ [snd (findName (getAttributes x))]
+                 where f z x = z ++ y
+                           where
+                               entry = getName x 
+                               y     = if entry == "entry" 
+                                          then [snd (findName (getAttributes x))]
+                                       else []
 
 getAllMessages::UNode String -> [UNode String]
 getAllMessages xml = onlyElems $ eChildren $ head $ findChildren "messages" xml

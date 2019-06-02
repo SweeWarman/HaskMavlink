@@ -9,7 +9,6 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.Map as MP
 import MavlinkHelper
 import XmlParser
-import Icarous
 import System.Environment
 import System.Exit
 import System.IO

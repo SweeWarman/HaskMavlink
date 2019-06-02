@@ -9,7 +9,7 @@ import Data.Maybe
 import Data.Strings
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Map as MP
-import Lib
+import MavlinkHelper
 import Text.XML.Expat.Tree
 import Text.XML.Expat.Format
 import Text.XML.Expat.Proc
@@ -39,7 +39,12 @@ processXmlFile filename = do
     let allMsgString = foldl (++) "" msgString
     let enumString = generateEnums dictofenums
     let outputString = ("\n" ++ allMsgString ++ "\n\n\n-- ENUMS\n\n" ++ enumString)
-    writeFile "src/icarous.hs" outputString
+    let headerString = "module Icarous where\n\n"
+    let importString = "import Data.Binary.Get\n" ++ 
+                       "import Data.Int\n" ++ 
+                       "import MavlinkHelper\n" ++ 
+                       "import qualified Data.ByteString.Lazy as BS\n\n" 
+    writeFile "src/Icarous.hs" (headerString ++ importString ++ outputString)
     case mErr of
         Nothing -> return ()
         Just err -> do
@@ -82,7 +87,7 @@ typeConversion = MP.fromList [("char","Char"),("int8_t","Int8"), ("uint8_t","Uin
                          ("float","Float"),("double","Double")]
 
 typeGetMonad::MP.Map String String
-typeGetMonad = MP.fromList [("char","getInt8le"),("int8_t","getInt8le"), ("uint8_t","getWord8le"),("uint8_t_mavlink_version","getWord8le"),
+typeGetMonad = MP.fromList [("char","getInt8"),("int8_t","getInt8"), ("uint8_t","getWord8"),("uint8_t_mavlink_version","getWord8"),
                          ("int16_t","getInt16le"),("uint16_t","getWord16le"),
                          ("int32_t","getInt32le"),("uint32_t","getWord32le"),
                          ("int64_t","getInt64le"),("uint64_t","getWord64le"),
@@ -189,7 +194,7 @@ fieldCombinator (n,z) (field,typed) = (n-1,z ++ "     _" ++ field ++ " <- " ++ t
                                         typeL = if len then numV else 0 
                                         typemonad = fromJust $ (MP.lookup typeN typeGetMonad)
                                         typemonadS = if typeL == 0 then typemonad
-                                                     else "mapM (\\x ->" ++ typemonad ++ ") [i| i <- [1.." ++ show(typeL) ++ "]]"
+                                                     else "mapM (\\x ->" ++ typemonad ++ ") [ i | i <- [1.." ++ show(typeL) ++ "] ]"
 
 
 generateDecoder::MavDictDesc -> String
@@ -214,12 +219,12 @@ generateDecoderWrapper msgdata = typeLine ++ firstLine ++ restline ++ "\n"
                                     name' = head $ fromJust (MP.lookup "name" msgdata)
                                     nameL = (strToLower name')
                                     name = strCapitalize nameL
-                                    restline = "where\n" ++ 
-                                               "    truncPayload = payload mavpkt\n" ++
-                                               "    lenPayload = length truncPayload\n" ++ 
-                                               "    fullPayload = if lenPayload < " ++ nameL ++ "_len then\n" ++ 
-                                               "                      truncPayload ++ [0| i <- [1..(" ++ nameL ++"_len - lenPayload)]]\n" ++  
-                                               "                   else truncPayload"
+                                    restline = "    where\n" ++ 
+                                               "        truncPayload = payload mavpkt\n" ++
+                                               "        lenPayload = length truncPayload\n" ++ 
+                                               "        fullPayload = if lenPayload < " ++ nameL ++ "_len then\n" ++ 
+                                               "                          truncPayload ++ [ 0 | i <- [1..(" ++ nameL ++"_len - lenPayload)] ]\n" ++  
+                                               "                      else truncPayload"
 
 
 walkEnumList:: String -> (String,[String]) -> String

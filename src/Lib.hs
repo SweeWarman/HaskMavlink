@@ -1,7 +1,9 @@
 module Lib where
 
-    {- 
-import 
+import MavlinkHelper
+import Data.Int
+import Data.Binary.Get
+import qualified Data.ByteString.Lazy as BS 
 
 -- Message specific data types
 data GlobalPositionInt = GlobalPositionInt {
@@ -17,6 +19,7 @@ data GlobalPositionInt = GlobalPositionInt {
 }deriving (Show)
 
 globalPositionIntLen = 28 
+
 
 
 decodeGlobalPositionInt :: Get GlobalPositionInt
@@ -40,4 +43,3 @@ getGlobalPositionInt mavpkt = runGet decodeGlobalPositionInt (BS.pack fullPayloa
                                         fullPayload = if lenPayload < globalPositionIntLen then 
                                                         truncPayload ++ [0 | i<-[1..(globalPositionIntLen -lenPayload)]]
                                                       else truncPayload
--}

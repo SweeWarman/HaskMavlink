@@ -26,6 +26,7 @@ dependencies:
 - hexpat
 - containers
 - strings
+- network
 
 library:
   source-dirs: src

@@ -41,6 +41,13 @@ crc25_acc  accum byte = (accum `shiftR` 8) `xor` val1 `xor` val2 `xor` val3
                                 val2 = (fromIntegral tmp) `shiftL` 3
                                 val3 = (fromIntegral tmp) `shiftR` 4
 
+
+getMsgId::Mavlink2Pkt -> Int
+getMsgId mavpkt = fromIntegral $ (_msgid !! 0) .|. ((_msgid !! 1) `shiftL` 8) .|. ((_msgid !! 2) `shiftL` 16)
+                 where 
+                     _msgid = msgid mavpkt
+
+
 -- Compute CRC on given data
 gen_crc25:: [Word8] -> Word16
 gen_crc25 inputdata = foldl crc25_acc 0xffff inputdata

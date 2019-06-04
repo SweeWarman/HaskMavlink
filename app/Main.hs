@@ -12,7 +12,29 @@ import XmlParser
 import System.Environment
 import System.Exit
 import System.IO
+import Network.Socket hiding (recv)
+import Network.Socket.ByteString.Lazy (recv, sendAll)
+import Lib
 
+
+runUDPServer :: IO ()
+runUDPServer = do
+    addrinfos <- getAddrInfo Nothing (Just "127.0.0.1") (Just "7000")
+    let serveraddr = head addrinfos
+    sock <- socket (addrFamily serveraddr) Datagram defaultProtocol
+    bind sock (addrAddress serveraddr)
+    print "UDP server is waiting"
+    message <- recv sock 4096 
+    let mavpkt = runGet decodeMavlink2Pkt message
+    if (getMsgId mavpkt) == 33
+       then print $ getGlobalPositionInt mavpkt
+    else
+       print $ getMsgId mavpkt
+    close sock
+
+
+main :: IO()
+main = runUDPServer
 
 main2 :: IO ()
 main2 = do{
@@ -22,6 +44,7 @@ main2 = do{
             -- ;let gpsmsg = getGlobalPositionInt mavpkt
             -- ;let gpsmsg2 = runGet decodeGlobalPositionInt bindata2
             -- ;let mavpktword8 =(mavlinkPkt2word8 mavpkt 104) 
+            ;print $ BL.unpack bindata1
             ;print $ mavpkt
             -- ;print $ gpsmsg 
             -- ;print $ gpsmsg2
@@ -29,8 +52,8 @@ main2 = do{
             -- ;print $ gen_crc25 mavpktword8
          }
 
-main :: IO ()
-main = do
+main3 :: IO ()
+main3= do
     args <- getArgs
     case args of
         [filename] -> processXmlFile filename

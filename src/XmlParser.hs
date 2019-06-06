@@ -45,6 +45,7 @@ processXmlFile filename = do
     let importString = "import Data.Binary.Get\n" ++ 
                        "import Data.Int\n" ++ 
                        "import MavlinkHelper\n" ++ 
+                       "import qualified Data.ByteString.Lazy.Char8 as C\n" ++ 
                        "import qualified Data.ByteString.Lazy as BS\n\n" 
     writeFile ("src/"++outputFilename) (headerString ++ importString ++ outputString)
     case mErr of
@@ -94,7 +95,7 @@ typeConversion = MP.fromList [("char","Char"),("int8_t","Int8"), ("uint8_t","Uin
                          ("float","Float"),("double","Double")]
 
 typeGetMonad::MP.Map String String
-typeGetMonad = MP.fromList [("char","getInt8"),("int8_t","getInt8"), ("uint8_t","getWord8"),("uint8_t_mavlink_version","getWord8"),
+typeGetMonad = MP.fromList [("char","getWord8"),("int8_t","getInt8"), ("uint8_t","getWord8"),("uint8_t_mavlink_version","getWord8"),
                          ("int16_t","getInt16le"),("uint16_t","getWord16le"),
                          ("int32_t","getInt32le"),("uint32_t","getWord32le"),
                          ("int64_t","getInt64le"),("uint64_t","getWord64le"),
@@ -169,8 +170,8 @@ get_crcextra name sortedFields sortedTypes extensions = ((fromIntegral crc) .&. 
                                                else []
 
 
-typecombinator::(Int,String)->(String,String)->(Int,String)
-typecombinator (n,z) (field,typed) = (n-1,z ++ "      " ++ field ++ "::" ++ typetext ++ comma ++ "\n")
+typecombinator::String -> (Int,String)->(String,String)->(Int,String)
+typecombinator name (n,z) (field,typed) = (n-1,z ++ "      " ++ "get"++ name ++ "_" ++ field ++ "::" ++ typetext ++ comma ++ "\n")
                                where
                                    t = strBreak "[" typed
                                    typeN = fst t
@@ -181,18 +182,19 @@ typecombinator (n,z) (field,typed) = (n-1,z ++ "      " ++ field ++ "::" ++ type
 
 
 generateMsgDataType::MavDictDesc -> String
-generateMsgDataType msgdata =  firstLine ++ (snd typesList) ++ "}\n\n\n"
+generateMsgDataType msgdata =  firstLine ++ (snd typesList) ++ "}deriving (Show)\n\n\n"
                                where
                                    firstLine = "data " ++ name ++ " = " ++ name ++ "{\n"
                                    name' = head $ fromJust (MP.lookup "name" msgdata)
-                                   name = strCapitalize (strToLower name')
+                                   nameL = strToLower name'
+                                   name = strCapitalize (nameL)
                                    types = fromJust (MP.lookup "sortedTypes" msgdata)
                                    fields = fromJust (MP.lookup "sortedFields" msgdata)
-                                   typesList = foldl typecombinator (length types,"") (zip fields types)
+                                   typesList = foldl (typecombinator name) (length types,"") (zip fields types)
 
 
 fieldCombinator::(Int,String) -> (String,String) -> (Int,String)
-fieldCombinator (n,z) (field,typed) = (n-1,z ++ "     _" ++ field ++ " <- " ++ typemonadS ++ ";\n") 
+fieldCombinator (n,z) (field,typed) = (n-1,z ++ "     _" ++ field ++ c ++ " <- " ++ typemonadS ++ "\n" ++ forChar) 
                                     where
                                         t = strBreak "[" typed
                                         typeN = fst t
@@ -200,15 +202,17 @@ fieldCombinator (n,z) (field,typed) = (n-1,z ++ "     _" ++ field ++ " <- " ++ t
                                         numV = (read (init (tail (snd t)))) 
                                         typeL = if len then numV else 0 
                                         typemonad = fromJust $ (MP.lookup typeN typeGetMonad)
+                                        c = if typeN == "char" then "c" else ""
+                                        forChar = if typeN == "char" then "     let _" ++ field ++ " = C.unpack (BS.pack _" ++ field ++ "c)\n" else ""
                                         typemonadS = if typeL == 0 then typemonad
                                                      else "mapM (\\x ->" ++ typemonad ++ ") [ i | i <- [1.." ++ show(typeL) ++ "] ]"
 
 
 generateDecoder::MavDictDesc -> String
-generateDecoder msgdata = typeLine ++ firstLine ++ (snd fieldsText) ++ lastline ++ "\n}\n\n\n"
+generateDecoder msgdata = typeLine ++ firstLine ++ (snd fieldsText) ++ lastline ++ "\n\n\n"
                            where
                              typeLine = "decode" ++ name ++ "::Get " ++ name ++ "\n"
-                             firstLine = "decode" ++ name ++ "= do {\n"
+                             firstLine = "decode" ++ name ++ "= do\n"
                              name' = head $ fromJust (MP.lookup "name" msgdata)
                              name = strCapitalize (strToLower name')
                              types = fromJust (MP.lookup "sortedTypes" msgdata)
@@ -221,12 +225,14 @@ generateDecoder msgdata = typeLine ++ firstLine ++ (snd fieldsText) ++ lastline 
 generateDecoderWrapper::MavDictDesc -> String
 generateDecoderWrapper msgdata = typeLine ++ firstLine ++ restline ++ "\n"
                                 where
-                                    typeLine = "get" ++ name ++ "::Mavlink2Pkt -> " ++ name ++ "\n"
-                                    firstLine = "get" ++ name ++ " mavpkt = runGet decode" ++ name  ++ " (BS.pack fullPayload)\n"
+                                    typeLine = "get" ++ name ++ "::Mavlink2Pkt -> Maybe " ++ name ++ "\n"
+                                    firstLine = "get" ++ name ++ " mavpkt = if (mychksum == checksum mavpkt) then Just pktdata else Nothing\n"
                                     name' = head $ fromJust (MP.lookup "name" msgdata)
                                     nameL = (strToLower name')
                                     name = strCapitalize nameL
                                     restline = "    where\n" ++ 
+                                               "        pktdata = runGet decode" ++ name  ++ " (BS.pack fullPayload)\n" ++
+                                               "        mychksum = gen_crc25 $ mavlinkPkt2word8 mavpkt " ++ nameL ++"_crc_extra\n" ++ 
                                                "        truncPayload = payload mavpkt\n" ++
                                                "        lenPayload = length truncPayload\n" ++ 
                                                "        fullPayload = if lenPayload < " ++ nameL ++ "_len then\n" ++ 
@@ -255,13 +261,13 @@ generateMsgString:: MavDictEnum -> String
 generateMsgString msgdata = preamble ++ msgidS ++ lenString ++ crcextraString ++ msgType ++ decstring ++ decwrapstring 
      where 
        preamble = "\n\n-- message: " ++ name ++ "\n\n"
-       lenString = nameL ++ "_len = " ++ msglen ++ "\n\n"
+       lenString = nameL ++ "_len :: Int\n" ++ nameL ++ "_len = " ++ msglen ++ "\n\n"
        msgType = generateMsgDataType msgdata
        decstring = generateDecoder (msgdata)
        decwrapstring = generateDecoderWrapper (msgdata)
        msglen = head $ fromJust (MP.lookup "msglength" msgdata)
        name = head $ fromJust  (MP.lookup "name" msgdata)
        nameL = strToLower name
-       msgidS = nameL ++ "_id = " ++ (head $ fromJust (MP.lookup "id" msgdata)) ++ "\n\n"
+       msgidS = nameL ++ "_id :: Int\n" ++ nameL ++ "_id = " ++ (head $ fromJust (MP.lookup "id" msgdata)) ++ "\n\n"
        crcextra = head $ fromJust  (MP.lookup "crcextra" msgdata) 
        crcextraString = nameL ++ "_crc_extra = " ++ crcextra ++ "\n\n" 

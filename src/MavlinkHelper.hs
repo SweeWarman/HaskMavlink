@@ -76,7 +76,7 @@ truncPayload payload = if (last payload) == 0
 mavlinkPkt2word8 :: Mavlink2Pkt -> Uint8 -> [Uint8]
 mavlinkPkt2word8 mavpkt crcextra = [trunclen] ++ ([incompat_flags,compat_flags,seqm,sysid,compid] <*> [mavpkt]) ++ 
                           (msgid mavpkt) ++ _payload ++ [crcextra]
-                              where _payload = truncPayload (payload mavpkt) 
+                              where _payload = (payload mavpkt) 
                                     trunclen = fromIntegral (length _payload)
 
 -- Function to decode a mavlink packet from a lazy byte stream
@@ -97,3 +97,4 @@ decodeMavlink2Pkt = do {
                        ;return $ Mavlink2Pkt _magic _len _incompat_flags _compat_flags 
                                              _seq _sysid _compid _msgid _payload _checksum _signature
                       }
+

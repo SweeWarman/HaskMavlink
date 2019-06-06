@@ -20,7 +20,8 @@ data GlobalPositionInt = GlobalPositionInt {
 
 globalPositionIntLen = 28 
 
-
+global_position_int_id::Int
+global_position_int_id = 33
 
 decodeGlobalPositionInt :: Get GlobalPositionInt
 decodeGlobalPositionInt = do {
@@ -35,11 +36,17 @@ decodeGlobalPositionInt = do {
                             ; _hdg <- getWord16le
                             ; return $ GlobalPositionInt _timestamp _lat _lon _alt _relative_alt _vx _vy _vz _hdg}
 
-getGlobalPositionInt::Mavlink2Pkt -> GlobalPositionInt
-getGlobalPositionInt mavpkt = runGet decodeGlobalPositionInt (BS.pack fullPayload)
+getGlobalPositionInt::Mavlink2Pkt -> Maybe GlobalPositionInt
+getGlobalPositionInt mavpkt = if mychksum == (checksum mavpkt) 
+                                 then Just gpsdata
+                              else Nothing
                                     where
+                                        gpsdata = runGet decodeGlobalPositionInt (BS.pack fullPayload)
+                                        mychksum = gen_crc25 $ mavlinkPkt2word8 mavpkt 104 
                                         truncPayload = payload mavpkt
                                         lenPayload = length truncPayload
                                         fullPayload = if lenPayload < globalPositionIntLen then 
                                                         truncPayload ++ [0 | i<-[1..(globalPositionIntLen -lenPayload)]]
                                                       else truncPayload
+
+

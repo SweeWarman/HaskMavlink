@@ -25,8 +25,8 @@ type MavDictDesc = MP.Map String [String]
 
 -- Function to process a given mavlink xml file
 -- and generate message and enum definitions and associated helper function 
-processXmlFile :: String -> IO ()
-processXmlFile filename = do
+processXmlFile :: String -> String -> IO ()
+processXmlFile filename outputdir = do
     inputText <- BL.readFile filename
     -- Note: Because we're not using the tree, Haskell can't infer the type of
     -- strings we're using so we need to tell it explicitly with a type signature.
@@ -47,7 +47,7 @@ processXmlFile filename = do
                        "import MavlinkHelper\n" ++ 
                        "import qualified Data.ByteString.Lazy.Char8 as C\n" ++ 
                        "import qualified Data.ByteString.Lazy as BS\n\n" 
-    writeFile ("src/"++outputFilename) (headerString ++ importString ++ outputString)
+    writeFile (outputdir++"/"++outputFilename) (headerString ++ importString ++ outputString)
     case mErr of
         Nothing -> return ()
         Just err -> do

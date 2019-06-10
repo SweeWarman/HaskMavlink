@@ -27,10 +27,12 @@ dependencies:
 - containers
 - strings
 - network
+- directory
 - optparse-applicative
 
 library:
-  source-dirs: src
+  source-dirs: 
+    - src 
 
 executables:
   mavgen-exe:
@@ -43,17 +45,6 @@ executables:
     dependencies:
     - haskmavlink
 
-  sockserver-exe:
-    main:                Main.hs
-    source-dirs:         app/socket_server
-    ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - haskmavlink
-
-
 tests:
   haskmavlink-test:
     main:                Spec.hs
@@ -62,5 +53,3 @@ tests:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
-    dependencies:
-    - haskmavlink

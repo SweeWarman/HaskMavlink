@@ -43,6 +43,7 @@ processXmlFile filename outputdir = do
     let outputString = ("\n" ++ allMsgString ++ "\n\n\n-- ENUMS\n\n" ++ enumString)
     let headerString = "module " ++ moduleName ++ " where\n\n"
     let importString = "import Data.Binary.Get\n" ++ 
+                       "import Data.Binary.Put\n" ++
                        "import Data.Int\n" ++ 
                        "import MavlinkHelper\n" ++ 
                        "import qualified Data.ByteString.Lazy.Char8 as C\n" ++ 
@@ -102,15 +103,15 @@ typeGetMonad = MP.fromList [("char","getWord8"),("int8_t","getInt8"), ("uint8_t"
                          ("int64_t","getInt64le"),("uint64_t","getWord64le"),
                          ("float","getFloatle"),("double","getDoublele")]
 
-findConvertor::MP.Map String String
-findConvertor = MP.fromList [("int8_t","pure"),("uint8_t","pure"),("char","BS.unpack"),("uint8_t_mavlink_version","pure"),
-                            ("int16_t","cnvW16toW8"),("uint16_t","cnvW16toW8"),
-                            ("int32_t","cnvW32toW8"),("uint32_t","cnvW32toW8"),
-                            ("int64_t","cnvW64toW8"),("uint64_t","cnvW64toW8"),
-                            ("float","cnvW64toW8"),("double","cnvW64toW8")]
+findPutter::MP.Map String String
+findPutter = MP.fromList [("int8_t","putInt8"),("uint8_t","putWord8"),("char","putStringUtf8"),("uint8_t_mavlink_version","putWord8"),
+                          ("int16_t","putInt16le"),("uint16_t","putWord16le"),
+                          ("int32_t","putInt32le"),("uint32_t","putWord32le"),
+                          ("int64_t","putInt64le"),("uint64_t","putWord64le"),
+                          ("float","putFloatle"),("double","putDoublele")]
 
 findIntConv::MP.Map String String
-findIntConv = MP.fromList [("int8_t","fromIntegral"),("uint8_t",""),("char","C.pack"),("uint8_t_mavlink_version",""),
+findIntConv = MP.fromList [("int8_t","fromIntegral"),("uint8_t",""),("char",""),("uint8_t_mavlink_version",""),
                             ("int16_t","fromIntegral"),("uint16_t",""),
                             ("int32_t","fromIntegral"),("uint32_t",""),
                             ("int64_t","fromIntegral"),("uint64_t",""),
@@ -242,10 +243,11 @@ fieldCombinator (n,z) (field,typed) = (n-1,z ++ "     _" ++ field ++ c ++ " <- "
 generateDecoder::MavDictDesc -> String
 generateDecoder msgdata = typeLine ++ firstLine ++ (snd fieldsText) ++ lastline ++ "\n\n\n"
                            where
-                             typeLine = "decode" ++ name ++ "::Get " ++ name ++ "\n"
-                             firstLine = "decode" ++ name ++ "= do\n"
+                             typeLine = "decode_" ++ nameL ++ "::Get " ++ name ++ "\n"
+                             firstLine = "decode_" ++ nameL ++ "= do\n"
                              name' = head $ fromJust (MP.lookup "name" msgdata)
-                             name = strCapitalize (strToLower name')
+                             nameL = strToLower name'
+                             name = strCapitalize (nameL)
                              types = fromJust (MP.lookup "sortedTypes" msgdata)
                              fields = fromJust (MP.lookup "sortedFields" msgdata)
                              fieldsText = foldl fieldCombinator (length types,"")  (zip fields types)
@@ -256,13 +258,13 @@ generateDecoder msgdata = typeLine ++ firstLine ++ (snd fieldsText) ++ lastline 
 generateDecoderWrapper::MavDictDesc -> String
 generateDecoderWrapper msgdata = typeLine ++ firstLine ++ restline ++ "\n\n\n"
                                 where
-                                    typeLine = "get" ++ name ++ "::Mavlink2Pkt -> Maybe " ++ name ++ "\n"
-                                    firstLine = "get" ++ name ++ " mavpkt = if (mychksum == checksum mavpkt) then Just pktdata else Nothing\n"
+                                    typeLine = "decode_" ++ nameL ++ "_mavpkt ::Mavlink2Pkt -> Maybe " ++ name ++ "\n"
+                                    firstLine = "decode_" ++ nameL ++ "_mavpkt mavpkt = if (mychksum == checksum mavpkt) then Just pktdata else Nothing\n"
                                     name' = head $ fromJust (MP.lookup "name" msgdata)
                                     nameL = (strToLower name')
                                     name = strCapitalize nameL
                                     restline = "    where\n" ++ 
-                                               "        pktdata = runGet decode" ++ name  ++ " (BS.pack fullPayload)\n" ++
+                                               "        pktdata = runGet decode_" ++ nameL ++ " (BS.pack fullPayload)\n" ++
                                                "        mychksum = gen_crc25 $ mavlinkPkt2word8 mavpkt " ++ nameL ++"_crc_extra\n" ++ 
                                                "        truncPayload = payload mavpkt\n" ++
                                                "        lenPayload = length truncPayload\n" ++ 
@@ -290,7 +292,7 @@ generateEnums msgdata = descp
 
 generateMsgString:: MavDictEnum -> String
 generateMsgString msgdata = preamble ++ msgidS ++ lenString ++ crcextraString ++ msgType ++ decstring ++ decwrapstring
-                             ++ getpayloadString ++ getMavpktFromMsgString ++ generateGetMavpktBytesString ++ "\n"
+                             ++ getpayloadString ++ getMavpktFromMsgString ++ generateGetMavpktBytesString1 ++ generateGetMavpktBytesString2 ++ "\n"
      where 
        preamble = "\n\n-- message: " ++ name ++ "\n\n"
        lenString = nameL ++ "_len :: Int\n" ++ nameL ++ "_len = " ++ msglen ++ "\n\n"
@@ -305,31 +307,32 @@ generateMsgString msgdata = preamble ++ msgidS ++ lenString ++ crcextraString ++
        crcextraString = nameL ++ "_crc_extra = " ++ crcextra ++ "\n\n" 
        getpayloadString = generateGetPayload msgdata
        getMavpktFromMsgString = generateGetMavpktFromMsg msgdata
-       generateGetMavpktBytesString = generateGetMavpktBytes msgdata
+       generateGetMavpktBytesString1 = generateGetMavpktBytesM msgdata
+       generateGetMavpktBytesString2 = generateGetMavpktBytes msgdata
 
 
        
 
 
 generateGetPayload :: MavDictEnum -> String
-generateGetPayload  msgdata = typeline ++ "get" ++ nameC ++ "Payload msg = " ++ fieldsText
+generateGetPayload  msgdata = typeline ++ "get_" ++ nameL ++ "_payload msg = do\n" ++ fieldsText 
                      where
-                        typeline = "get" ++ nameC ++ "Payload :: " ++ nameC ++ " -> [Uint8]\n"
+                        typeline = "get_" ++ nameL ++ "_payload :: " ++ nameC ++ " -> Put\n"
                         name = head $ fromJust (MP.lookup "name" msgdata)
                         nameL = strToLower name
                         nameC = strCapitalize nameL
                         types = fromJust (MP.lookup "sortedTypes" msgdata)
                         fields = fromJust (MP.lookup "sortedFields" msgdata)
                         fieldsText = snd (foldl fComb (length types,"")  (zip fields types))
-                        fComb (n,z) (field,typed) =  (n - 1,z ++ "        " ++ mapper ++ convertor ++ " ( " ++ cnvInteg ++ " ( get" ++ nameC ++ field ++ " msg ) )" ++ add)
+                        fComb (n,z) (field,typed) =  (n - 1,z ++ "        " ++ sequencer ++ "(" ++ mapper ++ convertor ++ " (get" ++ nameC ++ "_" ++ field ++ " msg))" ++ add)
                                            where
                                                t = strBreak "[" typed
                                                typeN = fst t
                                                len = length (snd t) > 0
-                                               mapper = if len then "fmap " else ""
-                                               convertor = fromJust $ MP.lookup typeN findConvertor
-                                               cnvInteg = fromJust $ MP.lookup typeN findIntConv
-                                               add = if n > 1 then "++\n" else "\n\n\n"
+                                               sequencer= if (len && (typeN /= "char"))then "sequence" else ""
+                                               mapper = if (len && (typeN /= "char")) then "fmap " else ""
+                                               convertor = fromJust $ MP.lookup typeN findPutter
+                                               add = if n > 1 then "\n" else "\n        return ()\n\n\n"
 
 generateGetMavpktFromMsg :: MavDictEnum -> String
 generateGetMavpktFromMsg msgdata = typeline ++ content
@@ -337,19 +340,39 @@ generateGetMavpktFromMsg msgdata = typeline ++ content
                             name = head $ fromJust (MP.lookup "name" msgdata)
                             nameL = strToLower name
                             nameC = strCapitalize nameL
-                            typeline =  "composeMavpktFromMsg :: " ++ nameC ++ " -> Uint8 -> Uint8 -> Uint8 -> Mavlink2Pkt\n"
-                            content  =  "composeMavpktFromMsg msg _seqm _sysid _compid = Mavlink2Pkt _magic _len _incompat_flags _compat_flags" ++
-                                        " _seqm _sysid _compid _msgid _payload _chksum [0]\n" ++
-                                        "                where\n" ++ 
-                                        "                       _magic = 253\n" ++
-                                        "                       _len   = fromIntegral " ++ nameL ++ "_len\n" ++
-                                        "                       _incompat_flags = 0\n" ++
-                                        "                       _compat_flags  = 0\n" ++
-                                        "                       _msgid         = init $ cnvW32toW8 (fromIntegral " ++ nameL ++ "_id)\n" ++ 
-                                        "                       _payload       = get" ++ nameC ++ "Payload msg\n" ++ 
-                                        "                       _mavpkt        = Mavlink2Pkt _magic _len _incompat_flags _compat_flags _seqm" ++
-                                                                                 "_sysid _compid _msgid _payload 0 [0]\n" ++ 
-                                        "                       _chksum        = gen_crc25 (mavlinkPkt2word8 _mavpkt" ++ nameL ++ "_crc_extra\n\n\n" 
+                            typeline =  "encode_" ++ nameL ++ "_mavpkt :: " ++ nameC ++ " -> Uint8 -> Uint8 -> Uint8 -> Mavlink2Pkt\n"
+                            content  =  "encode_" ++ nameL ++ "_mavpkt msg _seqm _sysid _compid = " ++
+                                        "Mavlink2Pkt _magic _len _incompat_flags _compat_flags _seqm _sysid _compid _msgid _payload _chksum [0]\n" ++
+                                        "                       where\n" ++
+                                        "                           _magic = 253\n" ++
+                                        "                           _len   = fromIntegral " ++ nameL ++ "_len\n" ++
+                                        "                           _incompat_flags = 0\n" ++
+                                        "                           _compat_flags = 0\n" ++
+                                        "                           _msgid = init $ cnvW32toW8 (fromIntegral " ++ nameL ++ "_id)\n" ++ 
+                                        "                           _payload = BS.unpack (runPut (get_" ++ nameL ++ "_payload msg))\n" ++ 
+                                        "                           _mavpkt = Mavlink2Pkt _magic _len _incompat_flags _compat_flags _seqm _sysid _compid _msgid _payload 0 [0]\n" ++
+                                        "                           _chksum = gen_crc25 (mavlinkPkt2word8 _mavpkt " ++ nameL ++ "_crc_extra)\n\n\n" 
+
+
+generateGetMavpktBytesM :: MavDictEnum -> String
+generateGetMavpktBytesM msgdata = typeline ++ content 
+                         where
+                             name = head $ fromJust (MP.lookup "name" msgdata)
+                             nameL = strToLower name
+                             nameC = strCapitalize nameL
+                             typeline = "get_" ++ nameL ++ "_bytesM :: " ++ nameC ++ " -> Uint8 -> Uint8 -> Uint8 -> Put\n" 
+                             content = "get_" ++ nameL ++ "_bytesM msg _seqm _sysid _compid = do\n" ++
+                                       "                              let mavpkt = encode_" ++ nameL ++ "_mavpkt msg _seqm _sysid _compid\n" ++
+                                       "                              putWord8 253\n" ++
+                                       "                              putWord8 (fromIntegral " ++ nameL ++ "_len)\n" ++
+                                       "                              putWord8 0\n" ++
+                                       "                              putWord8 0\n" ++
+                                       "                              sequence (fmap putWord8 (msgid mavpkt))\n" ++
+                                       "                              get_" ++ nameL ++ "_payload msg\n" ++
+                                       "                              putWord16le (checksum mavpkt)\n" ++
+                                       "                              sequence (fmap putWord8 (signature mavpkt))\n" ++
+                                       "                              return ()\n\n"
+
 
 generateGetMavpktBytes :: MavDictEnum -> String
 generateGetMavpktBytes msgdata = typeline ++ content 
@@ -357,7 +380,6 @@ generateGetMavpktBytes msgdata = typeline ++ content
                              name = head $ fromJust (MP.lookup "name" msgdata)
                              nameL = strToLower name
                              nameC = strCapitalize nameL
-                             typeline = "getMavpktBytes" ++ nameC ++ " :: " ++ nameC ++ " -> Uint8 -> Uint8 -> Uint8 -> BL.ByteString\n" 
-                             content = "getMavpktBytes" ++ nameC ++ " msg _seqm _sysid _compid =" ++
-                                                  " BL.pack (mavlinkPkt2word8 (composeMavpktFromMsg" ++ nameC ++ " msg _seqm _sysid _compid) " ++
-                                                        nameC ++ "_crc_extra)\n\n\n"
+                             typeline = "get_" ++ nameL ++ "_bytes :: " ++ nameC ++ " -> Uint8 -> Uint8 -> Uint8 -> BS.ByteString\n" 
+                             content = "get_" ++ nameL ++ "_bytes msg _seqm _sysid _compid =" ++
+                                                  " runPut (get_" ++ nameL ++ "_bytesM msg _seqm _sysid _compid)\n"

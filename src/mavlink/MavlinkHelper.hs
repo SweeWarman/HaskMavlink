@@ -90,10 +90,10 @@ decodeMavlink2Pkt = do {
                        ;_sysid <- getWord8
                        ;_compid <- getWord8
                        ;_msgid  <- mapM (\x->getWord8) [1,2,3]
-                       ;_payload <- mapM (\x->getWord8) [i | i <- [1.._len]]
+                       ;_payload <- mapM (\x->getWord8) [1.._len]
                        ;_checksum <- getWord16le
                        ;let mvlksigned = (_incompat_flags .&. 0x01) == 1
-                       ;_signature <- if mvlksigned then mapM (\x->getWord8) [i | i <- [1..13]] else (return [0])
+                       ;_signature <- if mvlksigned then mapM (\x->getWord8) [1..13] else (return [0])
                        ;return $ Mavlink2Pkt _magic _len _incompat_flags _compat_flags 
                                              _seq _sysid _compid _msgid _payload _checksum _signature
                       }

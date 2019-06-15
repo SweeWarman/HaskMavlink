@@ -71,10 +71,11 @@ data Mavlink2Pkt = Mavlink2Pkt {
 truncPayload payload = if (last payload) == 0
                               then truncPayload (init payload)
                        else payload
-                         
+
+
 -- Function to serialize the mavlink packet
-mavlinkPkt2word8 :: Mavlink2Pkt -> Uint8 -> [Uint8]
-mavlinkPkt2word8 mavpkt crcextra = [trunclen] ++ ([incompat_flags,compat_flags,seqm,sysid,compid] <*> [mavpkt]) ++ 
+getBytesForChecksum :: Mavlink2Pkt -> Uint8 -> [Uint8]
+getBytesForChecksum mavpkt crcextra = [trunclen] ++ ([incompat_flags,compat_flags,seqm,sysid,compid] <*> [mavpkt]) ++ 
                           (msgid mavpkt) ++ _payload ++ [crcextra]
                               where _payload = (payload mavpkt) 
                                     trunclen = fromIntegral (length _payload)

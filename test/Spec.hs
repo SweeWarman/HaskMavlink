@@ -13,25 +13,38 @@ import MavlinkHelper
 import System.Environment
 import System.Exit
 import System.IO
-import Network.Socket hiding (recv, recvFrom, send)
-import Network.Socket.ByteString.Lazy (recv, send)
+import Network.Socket hiding (recv, send)
+import Network.Socket.ByteString (recv, send, recvFrom, sendAllTo)
 import Common 
 
 
 runUDPServer :: IO ()
 runUDPServer = do
     let hints = defaultHints { addrFlags = [AI_PASSIVE] } 
-    addrinfos <- getAddrInfo (Just hints) (Just "127.0.0.1") (Just "7000")
-    let serveraddr = head addrinfos
-    sock <- socket (addrFamily serveraddr) Datagram defaultProtocol
-    bind sock (addrAddress serveraddr)
-    forever (getDataFromSocket sock)
+    addrinfos1 <- getAddrInfo (Just hints) (Just "127.0.0.1") (Just "7000")
+    addrinfos2 <- getAddrInfo (Just hints) (Just "127.0.0.1") (Just "7001")
+    let serveraddr1 = head addrinfos1
+    let clientaddr = head addrinfos2
+    sock <- socket (addrFamily clientaddr) Datagram defaultProtocol
+    connect sock (addrAddress clientaddr)
+    forever (getDataFromSocket sock (addrAddress clientaddr))
    
-getDataFromSocket :: Socket -> IO ()
-getDataFromSocket sock  = do
-    print "UDP server is waiting"
+getDataFromSocket :: Socket -> SockAddr -> IO ()
+getDataFromSocket sock clientaddr = do
+    print "UDP server is sending heartbeat"
+    let hbt = Heartbeat 1 0 0 0 0 3 
+    let mavpkthb = encode_heartbeat_mavpkt hbt 0 0 0
+    let chksum = gen_crc25 (getBytesForChecksum mavpkthb heartbeat_crc_extra)
+    print $ mavpkthb 
+    print $ getBytesForChecksum mavpkthb heartbeat_crc_extra
+    print $ chksum
+    print $ checksum mavpkthb
+    -- sendAllTo sock (BL.toStrict (get_heartbeat_bytes hbt 1 1 0)) (clientaddr)
+    val <- send sock (BL.toStrict (get_heartbeat_bytes hbt 0 0 0)) 
+    print $ val
+    print $ BL.unpack (get_heartbeat_bytes hbt 0 0 0)
     message <- recv sock 4096 
-    let mavpkt = runGet decodeMavlink2Pkt message
+    let mavpkt = runGet decodeMavlink2Pkt (BL.fromStrict message)
     print mavpkt
     if (getMsgId mavpkt) == global_position_int_id
        then (do 
@@ -39,7 +52,7 @@ getDataFromSocket sock  = do
              print gps 
              print $ BL.unpack (runPut (get_global_position_int_payload gps))
              print $ encode_global_position_int_mavpkt gps 6 255 0
-             send sock (get_global_position_int_bytes gps 6 255 0)
+             sendAllTo sock (BL.toStrict (get_global_position_int_bytes gps 6 255 0)) (clientaddr)
              return ()
             )
     else

@@ -194,8 +194,9 @@ get_crcextra name sortedFields sortedTypes extensions = ((fromIntegral crc) .&. 
                              fieldName ++ " ")) ++ fieldLength
                              where
                                  fieldName = if ((fst x) `elem` exten) then [] else (fst x)
-                                 fieldType = if ((fst x) `elem` exten) then [] else (fieldtname)
+                                 fieldType = if ((fst x) `elem` exten) then [] else (fieldtname')
                                  fieldtname = fst (strBreak "[" (snd x))
+                                 fieldtname' = if fieldtname == "uint8_t_mavlink_version" then "uint8_t" else fieldtname
                                  lenfield   = snd (strBreak "[" (snd x))
                                  fieldLength = if (length lenfield) > 0
                                                   then [read (init (tail lenfield))]
@@ -265,7 +266,7 @@ generateDecoderWrapper msgdata = typeLine ++ firstLine ++ restline ++ "\n\n\n"
                                     name = strCapitalize nameL
                                     restline = "    where\n" ++ 
                                                "        pktdata = runGet decode_" ++ nameL ++ " (BS.pack fullPayload)\n" ++
-                                               "        mychksum = gen_crc25 $ mavlinkPkt2word8 mavpkt " ++ nameL ++"_crc_extra\n" ++ 
+                                               "        mychksum = gen_crc25 $ getBytesForChecksum mavpkt " ++ nameL ++"_crc_extra\n" ++ 
                                                "        truncPayload = payload mavpkt\n" ++
                                                "        lenPayload = length truncPayload\n" ++ 
                                                "        fullPayload = if lenPayload < " ++ nameL ++ "_len then\n" ++ 
@@ -351,7 +352,7 @@ generateGetMavpktFromMsg msgdata = typeline ++ content
                                         "                           _msgid = init $ cnvW32toW8 (fromIntegral " ++ nameL ++ "_id)\n" ++ 
                                         "                           _payload = BS.unpack (runPut (get_" ++ nameL ++ "_payload msg))\n" ++ 
                                         "                           _mavpkt = Mavlink2Pkt _magic _len _incompat_flags _compat_flags _seqm _sysid _compid _msgid _payload 0 [0]\n" ++
-                                        "                           _chksum = gen_crc25 (mavlinkPkt2word8 _mavpkt " ++ nameL ++ "_crc_extra)\n\n\n" 
+                                        "                           _chksum = gen_crc25 (getBytesForChecksum _mavpkt " ++ nameL ++ "_crc_extra)\n\n\n" 
 
 
 generateGetMavpktBytesM :: MavDictEnum -> String
@@ -367,6 +368,9 @@ generateGetMavpktBytesM msgdata = typeline ++ content
                                        "                              putWord8 (fromIntegral " ++ nameL ++ "_len)\n" ++
                                        "                              putWord8 0\n" ++
                                        "                              putWord8 0\n" ++
+                                       "                              putWord8 _seqm\n" ++
+                                       "                              putWord8 _sysid\n" ++   
+                                       "                              putWord8 _compid\n" ++
                                        "                              sequence (fmap putWord8 (msgid mavpkt))\n" ++
                                        "                              get_" ++ nameL ++ "_payload msg\n" ++
                                        "                              putWord16le (checksum mavpkt)\n" ++

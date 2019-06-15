@@ -33,16 +33,7 @@ getDataFromSocket :: Socket -> SockAddr -> IO ()
 getDataFromSocket sock clientaddr = do
     print "UDP server is sending heartbeat"
     let hbt = Heartbeat 1 0 0 0 0 3 
-    let mavpkthb = encode_heartbeat_mavpkt hbt 0 0 0
-    let chksum = gen_crc25 (getBytesForChecksum mavpkthb heartbeat_crc_extra)
-    print $ mavpkthb 
-    print $ getBytesForChecksum mavpkthb heartbeat_crc_extra
-    print $ chksum
-    print $ checksum mavpkthb
-    -- sendAllTo sock (BL.toStrict (get_heartbeat_bytes hbt 1 1 0)) (clientaddr)
     val <- send sock (BL.toStrict (get_heartbeat_bytes hbt 0 0 0)) 
-    print $ val
-    print $ BL.unpack (get_heartbeat_bytes hbt 0 0 0)
     message <- recv sock 4096 
     let mavpkt = runGet decodeMavlink2Pkt (BL.fromStrict message)
     print mavpkt
@@ -52,7 +43,7 @@ getDataFromSocket sock clientaddr = do
              print gps 
              print $ BL.unpack (runPut (get_global_position_int_payload gps))
              print $ encode_global_position_int_mavpkt gps 6 255 0
-             sendAllTo sock (BL.toStrict (get_global_position_int_bytes gps 6 255 0)) (clientaddr)
+             send sock (BL.toStrict (get_global_position_int_bytes gps 6 255 0)) 
              return ()
             )
     else

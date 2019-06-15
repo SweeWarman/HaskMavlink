@@ -374,7 +374,9 @@ generateGetMavpktBytesM msgdata = typeline ++ content
                                        "                              sequence (fmap putWord8 (msgid mavpkt))\n" ++
                                        "                              get_" ++ nameL ++ "_payload msg\n" ++
                                        "                              putWord16le (checksum mavpkt)\n" ++
-                                       "                              sequence (fmap putWord8 (signature mavpkt))\n" ++
+                                       "                              if (length (signature mavpkt)) > 1 then\n" ++ 
+                                       "                                  sequence (fmap putWord8 (signature mavpkt))\n" ++
+                                       "                              else return [()]\n" ++
                                        "                              return ()\n\n"
 
 

@@ -7,8 +7,6 @@ import XmlParser
 import System.Environment
 import System.Exit
 import System.IO
-import Network.Socket hiding (recv)
-import Network.Socket.ByteString.Lazy (recv, sendAll)
 
 data InputOpts = InputOpts
     { xmlfilename :: String

@@ -22,6 +22,27 @@ For help with the mavgen tool:
 stack exec mavgen-exe -- --help
 ```
 
+### Running the test
+
+This is a sample application that uses the generated mavlink modules to talk to simple python mavlink server [test/pymavlink_server.py](test/pymavlink_server.py). 
+
+- First generate the haskell modules for the [common.xml](test/common.xml) mavlink definition. 
+
+```
+stack exec mavgen-exe -- -i test/common.xml -o test
+```
+
+- Launch the python server to send and receive mavlink packets to the test application
+
+```
+python3 test/pymavlink_server.py
+```
+
+- Run the sample test application
+```
+stack test
+```
+
 See [test/Spec.hs](test/Spec.hs) for example on using the generated haskell modules
 
 

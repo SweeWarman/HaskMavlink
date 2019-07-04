@@ -16,6 +16,7 @@ import System.Environment
 import System.Exit
 import System.Directory
 import System.IO
+import System.FilePath.Posix
 import qualified Data.ByteString as DB
 import qualified Data.ByteString.Char8 as DBC
 
@@ -30,7 +31,7 @@ processXmlFile filename outputdir = do
     inputText <- BL.readFile filename
     -- Note: Because we're not using the tree, Haskell can't infer the type of
     -- strings we're using so we need to tell it explicitly with a type signature.
-    let moduleName = (strCapitalize (fst (strBreak "." filename))) 
+    let moduleName = (strCapitalize (fst (strBreak "." (takeFileName filename)))) 
     let outputFilename = moduleName ++ ".hs"
     let (xml, mErr) = parse defaultParseOptions inputText :: (UNode String, Maybe XMLParseError)
     let allEnums = getAllEnums xml

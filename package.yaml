@@ -29,6 +29,7 @@ dependencies:
 - network
 - directory
 - optparse-applicative
+- filepath
 
 library:
   source-dirs: 
